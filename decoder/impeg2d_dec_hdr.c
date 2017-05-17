@@ -153,6 +153,12 @@ IMPEG2D_ERROR_CODES_T impeg2d_dec_seq_hdr(dec_state_t *ps_dec)
     u2_width    = impeg2d_bit_stream_get(ps_stream,12);
     u2_height   = impeg2d_bit_stream_get(ps_stream,12);
 
+    if (0 == u2_width || 0 == u2_height)
+    {
+        IMPEG2D_ERROR_CODES_T e_error = IMPEG2D_FRM_HDR_DECODE_ERR;
+        return e_error;
+    }
+
     if ((u2_width != ps_dec->u2_horizontal_size)
                     || (u2_height != ps_dec->u2_vertical_size))
     {
@@ -1738,6 +1744,15 @@ IMPEG2D_ERROR_CODES_T impeg2d_process_video_bit_stream(dec_state_t *ps_dec)
             if(u4_start_code_found == 0)
             {
                 impeg2d_next_start_code(ps_dec);
+                /* In case a dec_pic_data call has not been made, the number of
+                 * bytes consumed in the previous header decode has to be
+                 * consumed. Not consuming it will result in zero bytes consumed
+                 * loops in case there are multiple headers and the second
+                 * or a future header has a resolution change/other error where
+                 * the bytes of the last header are not consumed.
+                 */
+                ps_dec->i4_bytes_consumed = (ps_dec->s_bit_stream.u4_offset + 7) >> 3;
+                ps_dec->i4_bytes_consumed -= ((size_t)ps_dec->s_bit_stream.pv_bs_buf & 3);
             }
         }
         if((u4_start_code_found == 0) && (ps_dec->s_bit_stream.u4_offset > ps_dec->s_bit_stream.u4_max_offset))
@@ -1804,7 +1819,18 @@ IMPEG2D_ERROR_CODES_T impeg2d_process_video_bit_stream(dec_state_t *ps_dec)
                 FLUSH_BITS(ps_dec->s_bit_stream.u4_offset, ps_dec->s_bit_stream.u4_buf, ps_dec->s_bit_stream.u4_buf_nxt, 8, ps_dec->s_bit_stream.pu4_buf_aligned);
             }
             impeg2d_next_start_code(ps_dec);
-
+            if (0 == u4_start_code_found)
+            {
+                /* In case a dec_pic_data call has not been made, the number of
+                 * bytes consumed in the previous header decode has to be
+                 * consumed. Not consuming it will result in zero bytes consumed
+                 * loops in case there are multiple headers and the second
+                 * or a future header has a resolution change/other error where
+                 * the bytes of the last header are not consumed.
+                 */
+                ps_dec->i4_bytes_consumed = (ps_dec->s_bit_stream.u4_offset + 7) >> 3;
+                ps_dec->i4_bytes_consumed -= ((size_t)ps_dec->s_bit_stream.pv_bs_buf & 3);
+            }
         }
         if((u4_start_code_found == 0) && (ps_dec->s_bit_stream.u4_offset > ps_dec->s_bit_stream.u4_max_offset))
         {
